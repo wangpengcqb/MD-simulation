@@ -1,0 +1,14 @@
+#!/bin/bash
+
+#SBATCH -J graphene_com10_300K       # Job Name
+#SBATCH -o graphene_com10_300K    # Output and error file name (%j expands to jobID
+#SBATCH -n 160           # Total number of mpi tasks requested
+#SBATCH -p normal  # Queue (partition) name -- normal, development, etc.
+#SBATCH -t 7:00:00     # Run time (hh:mm:ss) - 7 hours
+#SBATCH --mail-user=siranjoy@gmail.com
+#SBATCH --mail-type=ALL
+#SBATCH -A Graphene_Mechanics
+ibrun lmp_30sep13_rebo < in.rms
+
+
+

@@ -1,0 +1,113 @@
+
+
+dimension 3
+boundary p p p
+
+#atom_style full
+#atom_style charge
+# setup neighbor style
+neighbor 0.3 bin
+neigh_modify every 1 delay 2
+
+units metal
+
+# Read atoms
+
+processors 16 10 1 grid onelevel file processor.dat
+
+read_data data.graph
+
+mass 1 12
+mass 2 12
+
+group pick_atom type 2 
+
+include potential.mod
+
+# define minimization parameters
+variable etol equal 0
+variable ftol equal 1.0e-8
+variable maxiter equal 5000
+variable maxeval equal 5000
+
+variable temp equal 300
+variable TimeStep equal 0.001 # 1fs
+variable thermo_step equal 1000
+variable dump_step equal 50000
+variable relax_step equal 500000
+variable deform_step equal 100000
+variable run_step equal 100*${deform_step}
+
+variable lx0 equal lx
+variable ly0 equal ly
+variable load_delta_xl equal  0.05*${lx0}
+variable load_delta_xh equal -0.05*${lx0}
+variable load_delta_y equal 0
+
+variable Nevery equal 10
+variable Nrepeat equal 10000
+variable Nfreq equal 100000
+
+
+compute		CTemp all temp
+compute 	CPE all pe
+compute     CPRESS all pressure CTemp
+compute     ZP  all  property/atom z 
+compute 	MSD all msd com yes
+
+
+thermo		${thermo_step}
+thermo_style custom step c_CTemp c_CPE lx
+
+
+fix relax all box/relax x 0.0 y 0.0
+minimize ${etol} ${ftol} ${maxiter} ${maxeval} 
+
+unfix relax
+
+
+fix walllow all wall/lj93 zlo -3.16 0.037585057 3.68137804 1000 units box pbc yes
+fix_modify walllow energy yes
+
+
+velocity 	all create ${temp} 23400123 dist gaussian units box
+timestep 	${TimeStep}
+
+#===================  Initial relax ===================================
+
+fix  NVT all nvt temp ${temp} ${temp} 0.1 
+
+dump  		dump_relax all xyz ${dump_step} dump_relax.xyz
+dump_modify	dump_relax element C C
+
+fix ave_z_relax all ave/spatial ${Nevery} ${Nrepeat} ${Nfreq} x 0 1 y 0 1 z 0 1 c_ZP units reduced file ave_z_relax.txt ave running
+  
+fix  AVE_time_nacm_relax all ave/time ${Nevery} ${Nrepeat} ${Nfreq} c_CTemp c_CPE v_lx0 c_CPRESS[1] c_CPRESS[2] c_CPRESS[4] f_walllow  f_walllow[1]  c_MSD[3] file ave_time_nacm_relax.txt 
+
+fix  AVE_time_acm_relax all ave/time ${Nevery} ${Nrepeat} ${Nfreq} c_CTemp c_CPE v_lx0 c_CPRESS[1] c_CPRESS[2] c_CPRESS[4] f_walllow  f_walllow[1]  c_MSD[3] file ave_time_acm_relax.txt ave running 
+
+run ${relax_step}
+
+unfix   NVT
+undump  dump_relax
+unfix  AVE_time_nacm_relax
+unfix  AVE_time_acm_relax
+
+#===================  Deform ===========================================
+
+fix LoadBox all deform ${deform_step} x delta ${load_delta_xl} ${load_delta_xh} remap x units box
+
+dump  		dump_deform all xyz ${deform_step} dump_deform.xyz
+dump_modify	dump_deform element C C
+
+fix  NVTdeform all nvt temp ${temp} ${temp} 0.1
+
+fix  AVE_time_nacm all ave/time ${Nevery} ${Nrepeat} ${Nfreq} c_CTemp c_CPE v_lx0 c_CPRESS[1] c_CPRESS[2] c_CPRESS[4] f_walllow  f_walllow[1]  c_MSD[3] file ave_time_nacm.txt 
+
+fix  AVE_time_acm all ave/time ${Nevery} ${Nrepeat} ${Nfreq} c_CTemp c_CPE v_lx0 c_CPRESS[1] c_CPRESS[2] c_CPRESS[4] f_walllow  f_walllow[1]  c_MSD[3] file ave_time_acm.txt ave running 
+
+run ${run_step}
+
+
+# Write restart
+write_restart restart.equil
